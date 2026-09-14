@@ -14,6 +14,7 @@ import cv2
 import config
 
 _camera = None
+_last_used = 0.0
 
 
 def _open_camera():
@@ -37,20 +38,24 @@ def capture_frame():
 
     Trajanje obuhvata i otvaranje kamere, jer je i ono deo vremena odziva
     sistema kada kamera nije trajno otvorena."""
-    global _camera
+    global _camera, _last_used
 
     start = time.perf_counter()
 
-    if _camera is None:
+    was_open = _camera is not None
+    if not was_open:
         _camera = _open_camera()
 
     if _camera is None:
         return None, (time.perf_counter() - start) * 1000.0
 
-    for _ in range(config.CAMERA_FLUSH_FRAMES):
+    flush = (config.CAMERA_FLUSH_FRAMES_WARM if was_open
+             else config.CAMERA_FLUSH_FRAMES)
+    for _ in range(flush):
         _camera.grab()
 
     success, frame = _camera.read()
+    _last_used = time.monotonic()
 
     if not config.KEEP_CAMERA_OPEN:
         release_camera()
@@ -92,3 +97,22 @@ def release_camera():
     if _camera is not None:
         _camera.release()
         _camera = None
+
+
+def release_if_idle():
+    """Otpusta kameru posle zadatog vremena bez okidanja. Poziva se iz
+    glavne petlje dok ona ceka na senzor, cime kamera u praznoj prostoriji
+    ostaje zatvorena, a tokom prolaska osobe se otvaranje placa samo
+    jednom. Vraca True ako je kamera otpustena."""
+    if _camera is None or not config.CAMERA_IDLE_RELEASE_S:
+        return False
+
+    if time.monotonic() - _last_used < config.CAMERA_IDLE_RELEASE_S:
+        return False
+
+    release_camera()
+    return True
+
+
+def is_open():
+    return _camera is not None

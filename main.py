@@ -21,7 +21,8 @@ import sys
 import time
 
 import config
-from camera import capture_frame, draw_boxes, release_camera, save_frame
+from camera import (capture_frame, draw_boxes, release_camera,
+                    release_if_idle, save_frame)
 from detectors import AVAILABLE, create_detector, filter_by_score
 from led import led_off, led_on, led_close
 from logger import log_event, write_status
@@ -76,6 +77,10 @@ def main():
             # Kratko vreme cekanja da bi prekid tastaturom bio odziv.
             t0 = sensor.wait_for_motion(timeout=1.0)
             if t0 is None:
+                # Prostorija je mirna: ako je kamera predugo otvorena bez
+                # okidanja, otpusta se (videti camera.release_if_idle).
+                if release_if_idle():
+                    print("kamera otpustena (bez okidanja)")
                 continue
 
             led_on()
@@ -123,11 +128,12 @@ def main():
             print(f"okidanje | akvizicija {capture_ms:6.1f} ms | "
                   f"detekcija {infer_ms:6.1f} ms | ukupno {total_ms:6.1f} ms | "
                   f"{'osoba: ' + str(len(detections)) if found else 'nema osobe'}"
-                  f"{' | ' + image if image else ''}")
+                  f"{' | ' + image if image else ''}", flush=True)
 
             sensor.wait_for_no_motion(timeout=30)
             led_off()
             time.sleep(config.COOLDOWN)
+            sensor.clear_pending()
 
     except KeyboardInterrupt:
         print("\nZaustavljanje...")

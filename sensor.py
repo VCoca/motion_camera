@@ -61,6 +61,15 @@ class PirSensor:
         with self._lock:
             return self._t0
 
+    def clear_pending(self):
+        """Odbacuje ivicu koja je nastala dok je sistem obradjivao prethodno
+        okidanje. Bez toga bi sledeci prolaz dobio zastareo trenutak t0, pa
+        bi izmereni odziv sadrzao i vreme cekanja u redu, a ne samo odziv
+        sistema. Uz to je isti neprekidni pokret inace obradjivan dvaput."""
+        self._event.clear()
+        with self._lock:
+            self._t0 = None
+
     def wait_for_no_motion(self, timeout=None):
         return self._device.wait_for_inactive(timeout)
 

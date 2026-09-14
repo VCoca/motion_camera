@@ -9,6 +9,9 @@ WorkingDirectory=/home/vcoca/motion-camera
 ExecStart=/usr/bin/python3 /home/vcoca/motion-camera/main.py
 Restart=on-failure
 RestartSec=5
+# Bez ovoga Python zadrzava ispis u baferu kada ne pise na terminal,
+# pa journalctl dugo ne pokazuje nista.
+Environment=PYTHONUNBUFFERED=1
 # Ispis programa ide u zurnal sistema: journalctl -u motion-camera -f
 StandardOutput=journal
 StandardError=journal

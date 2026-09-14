@@ -19,14 +19,23 @@ CAMERA_ID = 0
 FRAME_WIDTH = 640
 FRAME_HEIGHT = 480
 
-# Broj kadrova koji se odbacuje pre upotrebljivog, da se isprazni
-# bafer kamere i ne dobije ustajala slika od pre okidanja.
-CAMERA_FLUSH_FRAMES = 4
+# Broj kadrova koji se odbacuje pre upotrebljivog. Dve razlicite svrhe,
+# pa i dve vrednosti (obe potvrdjene merenjem, videti README):
+#   - posle otvaranja kamere automatika ekspozicije se smiruje tek oko
+#     cetvrtog kadra, pa je prvi kadar i do 50 % svetliji od smirenog;
+#   - kod vec otvorene kamere odbacuje se zapamcen kadar iz bafera, da
+#     se ne dobije slika od pre okidanja.
+CAMERA_FLUSH_FRAMES = 4       # tek otvorena kamera
+CAMERA_FLUSH_FRAMES_WARM = 2  # kamera vec otvorena i smirena
 
-# Kamera se otvara po okidanju i otpusta posle odluke, cime je
-# vreme u kome je aktivna svedeno na kratke odsecke (videti 2.5).
-# Za merenja se moze drzati otvorena, jer otvaranje traje osetno.
-KEEP_CAMERA_OPEN = False
+# Drzanje kamere otvorene izmedju okidanja skracuje vreme akvizicije sa
+# oko 1200 ms na oko 170 ms, jer otvaranje uredjaja samo po sebi traje
+# preko pola sekunde. Da argument o privatnosti iz odeljka 2.5 ostane na
+# snazi, kamera se otpusta posle CAMERA_IDLE_RELEASE_S sekundi bez
+# okidanja: tokom prolaska osobe placa se otvaranje jednom, a u praznoj
+# prostoriji kamera je zatvorena.
+KEEP_CAMERA_OPEN = True
+CAMERA_IDLE_RELEASE_S = 30.0  # 0 iskljucuje otpustanje
 
 # --- Detektor ---
 DETECTOR = "hog"          # "hog" ili "yolo"

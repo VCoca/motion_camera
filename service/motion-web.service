@@ -10,6 +10,7 @@ WorkingDirectory=/home/vcoca/motion-camera
 ExecStart=/usr/bin/python3 /home/vcoca/motion-camera/app.py
 Restart=on-failure
 RestartSec=5
+Environment=PYTHONUNBUFFERED=1
 StandardOutput=journal
 StandardError=journal
 
