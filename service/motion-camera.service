@@ -1,0 +1,17 @@
+[Unit]
+Description=Sistem za detekciju prisustva osoba (PIR + kamera)
+After=multi-user.target
+
+[Service]
+Type=simple
+User=vcoca
+WorkingDirectory=/home/vcoca/motion-camera
+ExecStart=/usr/bin/python3 /home/vcoca/motion-camera/main.py
+Restart=on-failure
+RestartSec=5
+# Ispis programa ide u zurnal sistema: journalctl -u motion-camera -f
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

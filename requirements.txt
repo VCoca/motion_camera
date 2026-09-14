@@ -1,0 +1,16 @@
+# Na Raspberry Pi OS-u opencv, numpy i gpiozero dolaze uz sistem i instaliraju
+# se paketima distribucije, ne preko pip-a:
+#
+#   sudo apt install python3-opencv python3-numpy python3-gpiozero python3-flask
+#
+# Ako se ipak koristi virtuelno okruzenje, mora videti sistemske pakete:
+#
+#   python3 -m venv --system-site-packages .venv
+#
+# Verzije na kojima je sistem razvijan i meren:
+# Raspberry Pi OS (Debian 13 trixie), Python 3.13.5, OpenCV 4.10.0
+
+opencv-python==4.10.0
+numpy>=1.24
+gpiozero>=2.0
+Flask>=3.0

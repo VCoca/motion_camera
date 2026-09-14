@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="sr">
+
+<head>
+
+    <meta charset="utf-8">
+    <title>Motion Camera</title>
+
+    <meta http-equiv="refresh" content="10">
+
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='style.css') }}">
+
+</head>
+
+<body>
+
+<div class="container">
+
+<h1>📷 Sistem za detekciju prisustva osoba</h1>
+
+<div class="stats">
+
+<div class="card">
+    <h2>Stanje</h2>
+    <p class="{{ 'ok' if state == 'Running' else 'bad' }}">{{ state }}</p>
+    <p class="sub">detektor: {{ detector }}</p>
+</div>
+
+<div class="card">
+    <h2>Okidanja</h2>
+    <p>{{ summary.triggers }}</p>
+    <p class="sub">osoba nadjena: {{ summary.persons }}</p>
+</div>
+
+<div class="card">
+    <h2>Odbacila kamera</h2>
+    <p>{{ summary.rejected_pct }} %</p>
+    <p class="sub">{{ summary.rejected }} od {{ summary.triggers }} okidanja</p>
+</div>
+
+<div class="card">
+    <h2>Odziv (median)</h2>
+    <p>{% if timing.total %}{{ timing.total | round(0) | int }} ms{% else %}—{% endif %}</p>
+    <p class="sub">
+        akvizicija {% if timing.capture %}{{ timing.capture | round(0) | int }}{% else %}—{% endif %} ms ·
+        detekcija {% if timing.infer %}{{ timing.infer | round(0) | int }}{% else %}—{% endif %} ms
+    </p>
+</div>
+
+<div class="card">
+    <h2>Slobodno</h2>
+    <p>{{ free_disk }} GB</p>
+    <p class="sub">{{ total_images }} slika</p>
+</div>
+
+</div>
+
+<p class="time">
+    Poslednja detekcija: {{ last_time }} &nbsp;·&nbsp;
+    Vreme na ploci: {{ current_time }}
+</p>
+
+<div class="buttons">
+    <a class="link" href="{{ url_for('events_csv') }}">⤓ Preuzmi evidenciju (CSV)</a>
+
+    <form method="post" action="{{ url_for('delete_all') }}"
+          onsubmit="return confirm('Obrisati sve slike?');">
+        <button type="submit">🗑 Obriši sve slike</button>
+    </form>
+</div>
+
+<h2>Poslednji događaji</h2>
+
+<div class="logs">
+<table class="events">
+    <thead>
+        <tr>
+            <th>Vreme</th>
+            <th>Det.</th>
+            <th>Akviz.</th>
+            <th>Detekcija</th>
+            <th>Ukupno</th>
+            <th>Nalaza</th>
+            <th>Skor</th>
+            <th>Odluka</th>
+        </tr>
+    </thead>
+    <tbody>
+    {% for event in events %}
+        <tr>
+            <td>{{ event.ts }}</td>
+            <td>{{ event.detector }}</td>
+            <td class="num">{{ event.t_capture_ms }}</td>
+            <td class="num">{{ event.t_infer_ms }}</td>
+            <td class="num">{{ event.t_total_ms }}</td>
+            <td class="num">{{ event.n_boxes }}</td>
+            <td class="num">{{ event.max_score }}</td>
+            <td>
+                {% if event.decision == 'person' %}
+                    <span class="tag ok">osoba</span>
+                {% elif event.decision == 'no_person' %}
+                    <span class="tag">nema osobe</span>
+                {% else %}
+                    <span class="tag bad">{{ event.decision }}</span>
+                {% endif %}
+            </td>
+        </tr>
+    {% else %}
+        <tr><td colspan="8">Još nema zabeleženih događaja.</td></tr>
+    {% endfor %}
+    </tbody>
+</table>
+</div>
+
+{% if latest %}
+
+<h2>Poslednja slika</h2>
+
+<img class="latest" src="{{ url_for('photos', filename=latest) }}" alt="poslednja detekcija">
+
+{% endif %}
+
+<h2>Galerija</h2>
+
+<div class="gallery">
+
+{% for image in images %}
+
+<div class="image-card">
+    <a href="{{ url_for('photos', filename=image) }}" target="_blank">
+        <img src="{{ url_for('photos', filename=image) }}" alt="{{ image }}" loading="lazy">
+    </a>
+    <p>{{ image }}</p>
+</div>
+
+{% endfor %}
+
+</div>
+
+</div>
+
+</body>
+
+</html>

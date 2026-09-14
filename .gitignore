@@ -1,0 +1,18 @@
+__pycache__/
+*.pyc
+.venv/
+
+# Snimci sistema u radu
+photos/
+logs/
+status.txt
+
+# Tezine mreze (23 MB) -- preuzimaju se po uputstvu u models/README.md
+models/*.weights
+
+# Izlaz vrednovanja se ponovo dobija pokretanjem eval/bench.py i metrics.py
+results/
+
+# Skup podataka: slike se ne drze u repozitorijumu, oznake se drze
+eval/dataset/images/*
+!eval/dataset/images/.gitkeep

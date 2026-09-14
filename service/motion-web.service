@@ -1,0 +1,17 @@
+[Unit]
+Description=Veb prikaz sistema za detekciju prisustva
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=vcoca
+WorkingDirectory=/home/vcoca/motion-camera
+ExecStart=/usr/bin/python3 /home/vcoca/motion-camera/app.py
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
