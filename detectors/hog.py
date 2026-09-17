@@ -1,10 +1,8 @@
-"""HOG dekriptor sa linearnim SVM klasifikatorom.
+"""HOG deskriptor sa linearnim SVM klasifikatorom.
 
 Koristi se detektor pesaka koji dolazi uz OpenCV, obucen nad prozorom
 64 x 128 piksela (Dalal i Triggs, 2005). Posledica te velicine prozora:
 osoba niza od 128 piksela u ulaznoj slici ne moze biti otkrivena."""
-
-import time
 
 import cv2
 import numpy as np
@@ -28,8 +26,7 @@ class HogDetector(Detector):
         self.hog = cv2.HOGDescriptor()
         self.hog.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())
 
-    def detect(self, frame):
-        start = time.perf_counter()
+    def _detect(self, frame):
         boxes, weights = self.hog.detectMultiScale(
             frame,
             winStride=self.win_stride,
@@ -39,17 +36,15 @@ class HogDetector(Detector):
             # kriva preciznosti i odziva mogla nacrtati iz jednog prolaza.
             hitThreshold=0.0,
         )
-        elapsed_ms = (time.perf_counter() - start) * 1000.0
 
-        scores = np.asarray(weights, dtype=float).reshape(-1) if len(weights) else []
+        scores = (np.asarray(weights, dtype=float).reshape(-1)
+                  if len(weights) else [])
 
         detections = []
         for i, (x, y, w, h) in enumerate(boxes):
             score = float(scores[i]) if i < len(scores) else 0.0
             detections.append(Detection(int(x), int(y), int(w), int(h), score))
-
-        detections.sort(key=lambda d: d.score, reverse=True)
-        return detections, elapsed_ms
+        return detections
 
     def describe(self):
         return (

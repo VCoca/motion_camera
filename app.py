@@ -19,9 +19,6 @@ app = Flask(__name__)
 # Kljuc sluzi samo za kratke poruke korisniku posle cuvanja podesavanja.
 app.secret_key = os.environ.get("FLASK_SECRET", "motion-camera")
 
-# Posle koliko sekundi bez upisa stanja se smatra da sistem vise ne radi.
-STALE_AFTER_S = 120
-
 
 def _system_state():
     """Stanje se utvrdjuje iz samog procesa, ne iz onoga sto je zapisao:
@@ -180,18 +177,22 @@ def settings():
     return redirect(url_for("index"))
 
 
+def _form_threshold():
+    value = request.form.get("threshold", "").strip()
+    try:
+        return float(value) if value else None
+    except ValueError:
+        return None
+
+
 @app.route("/system/start", methods=["POST"])
 def system_start():
     detector = request.form.get("detector", "hog")
     save_mode = request.form.get("save_mode", "person")
+    scenario = request.form.get("scenario", "").strip()
 
-    threshold = request.form.get("threshold", "").strip()
-    try:
-        threshold = float(threshold) if threshold else None
-    except ValueError:
-        threshold = None
-
-    ok, message = supervisor.start(detector, save_mode, threshold)
+    ok, message = supervisor.start(detector, save_mode, _form_threshold(),
+                                   scenario)
     flash(message, "ok" if ok else "bad")
     return redirect(url_for("index"))
 
@@ -209,8 +210,10 @@ def system_restart():
     novim postupkom, jer se detektor bira pri pokretanju."""
     detector = request.form.get("detector", "hog")
     save_mode = request.form.get("save_mode", "person")
+    scenario = request.form.get("scenario", "").strip()
 
-    ok, message = supervisor.restart(detector, save_mode)
+    ok, message = supervisor.restart(detector, save_mode, _form_threshold(),
+                                     scenario)
     flash(message, "ok" if ok else "bad")
     return redirect(url_for("index"))
 

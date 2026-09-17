@@ -39,7 +39,22 @@ CAMERA_IDLE_RELEASE_S = 30.0  # 0 iskljucuje otpustanje
 
 # --- Detektor ---
 DETECTOR = "hog"          # "hog" ili "yolo"
-SCORE_THRESHOLD = 0.0     # radna tacka; 0.0 znaci "prihvati sve nalaze"
+
+# Radna tacka se bira POSEBNO za svaki detektor, jer skorovi nisu ista
+# velicina: kod HOG-a je to vrednost odlucujuce funkcije SVM-a, a kod YOLO-a
+# verovatnoca klase (videti detectors/base.py). Jedna vrednost za oba
+# postupka znaci da se na jedan od njih primenjuje prag izveden iz tudje
+# skale. Vrednosti se upisuju posle vrednovanja, iz kolone
+# "prag_za_ciljni_odziv" u results/metrics_summary.csv.
+# 0.0 znaci "prihvati sve nalaze".
+SCORE_THRESHOLD = {
+    "hog": 0.0,
+    "yolo": 0.0,
+}
+
+
+def score_threshold(detector_name):
+    return float(SCORE_THRESHOLD.get(detector_name, 0.0))
 
 # HOG
 HOG_WIN_STRIDE = (8, 8)
@@ -77,6 +92,9 @@ NOTIFY_COOLDOWN_S = 300
 PHOTO_FOLDER = os.path.join(BASE_DIR, "photos")
 LOG_FOLDER = os.path.join(BASE_DIR, "logs")
 EVENT_CSV = os.path.join(LOG_FOLDER, "events.csv")
+# Uz svaku prikupljenu sliku belezi se i scenario u kome je snimljena, jer
+# se bez toga matrica scenarija posle snimanja ne moze rekonstruisati.
+FRAMES_CSV = os.path.join(LOG_FOLDER, "frames.csv")
 STATUS_FILE = os.path.join(BASE_DIR, "status.txt")
 NOTIFY_STATE_FILE = os.path.join(LOG_FOLDER, "notify_state.json")
 

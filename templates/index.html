@@ -77,6 +77,7 @@
     detektor <b>{{ process.detector }}</b> ·
     režim čuvanja <b>{{ process.save_mode }}</b>
     {% if process.threshold is not none %} · prag <b>{{ process.threshold }}</b>{% endif %}
+    {% if process.scenario %} · scenario <b>{{ process.scenario }}</b>{% endif %}
     {% if process.started_at %} · pokrenut {{ process.started_at }}{% endif %}
     · proces {{ process.pid }}
 </p>
@@ -94,6 +95,15 @@
         <option value="person" {% if process.save_mode == 'person' %}selected{% endif %}>samo kada je osoba nađena</option>
         <option value="all" {% if process.save_mode == 'all' %}selected{% endif %}>svaki kadar (prikupljanje skupa)</option>
     </select>
+
+    <label for="threshold_r">Prag poverenja (prazno = bez praga)</label>
+    <input type="text" id="threshold_r" name="threshold"
+           value="{{ process.threshold if process.threshold is not none else '' }}"
+           placeholder="npr. 0.6">
+
+    <label for="scenario_r">Scenario (samo pri prikupljanju skupa)</label>
+    <input type="text" id="scenario_r" name="scenario"
+           value="{{ process.scenario or '' }}" placeholder="4m-popreko-dnevno">
 
     <button type="submit" class="save">↻ Primeni i ponovo pokreni</button>
 </form>
@@ -121,6 +131,10 @@
 
     <label for="threshold">Prag poverenja (prazno = bez praga)</label>
     <input type="text" id="threshold" name="threshold" placeholder="npr. 0.6">
+
+    <label for="scenario">Scenario (samo pri prikupljanju skupa)</label>
+    <input type="text" id="scenario" name="scenario"
+           placeholder="4m-popreko-dnevno">
 
     <button type="submit" class="save">▶ Pokreni sistem</button>
 </form>

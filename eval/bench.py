@@ -16,6 +16,7 @@ import csv
 import os
 import statistics
 import sys
+import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -23,6 +24,7 @@ import cv2  # noqa: E402
 
 import config  # noqa: E402
 from detectors import AVAILABLE, create_detector  # noqa: E402
+from logger import cpu_temperature, throttled_state  # noqa: E402
 
 EVAL_DIR = os.path.dirname(os.path.abspath(__file__))
 IMAGES_DIR = os.path.join(EVAL_DIR, "dataset", "images")
@@ -71,7 +73,11 @@ def run_detector(name, image_names, repeat):
         det_writer.writerow(["image", "x", "y", "w", "h", "score"])
 
         time_writer = csv.writer(time_file)
-        time_writer.writerow(["image", "width", "height", "infer_ms"])
+        # Upisuje se SVAKI prolaz, ne samo najbolji: medijana i 95. percentil
+        # racunaju se iz svih merenja, a temperatura i stanje takta se beleze
+        # jer bez njih se porast vremena pod opterecenjem ne moze objasniti.
+        time_writer.writerow(["image", "width", "height", "repeat",
+                              "infer_ms", "cpu_temp_c", "throttled"])
 
         for index, image_name in enumerate(image_names, start=1):
             frame = cv2.imread(os.path.join(IMAGES_DIR, image_name))
@@ -81,17 +87,15 @@ def run_detector(name, image_names, repeat):
 
             height, width = frame.shape[:2]
 
-            times = []
             detections = []
-            for _ in range(repeat):
-                detections, elapsed_ms = detector.detect(frame)
-                times.append(elapsed_ms)
+            temp = cpu_temperature()
+            throttled = throttled_state()
 
-            # Za merenje se uzima najbolji prolaz, jer je on najmanje
-            # zagadjen radom ostalih procesa na ploci.
-            best_ms = min(times)
-            all_times.append(best_ms)
-            time_writer.writerow([image_name, width, height, f"{best_ms:.2f}"])
+            for attempt in range(1, repeat + 1):
+                detections, elapsed_ms = detector.detect(frame)
+                all_times.append(elapsed_ms)
+                time_writer.writerow([image_name, width, height, attempt,
+                                      f"{elapsed_ms:.2f}", temp, throttled])
 
             for det in detections:
                 det_writer.writerow([image_name, det.x, det.y, det.w, det.h,
@@ -103,7 +107,8 @@ def run_detector(name, image_names, repeat):
     summary = {
         "detector": name,
         "opis": detector.describe(),
-        "slika": len(all_times),
+        "slika": len(image_names),
+        "merenja": len(all_times),
         "median_ms": round(statistics.median(all_times), 1) if all_times else None,
         "p95_ms": round(percentile(all_times, 0.95), 1) if all_times else None,
         "min_ms": round(min(all_times), 1) if all_times else None,
@@ -112,7 +117,10 @@ def run_detector(name, image_names, repeat):
 
     print(f"  median {summary['median_ms']} ms · "
           f"95. percentil {summary['p95_ms']} ms · "
-          f"raspon {summary['min_ms']}–{summary['max_ms']} ms")
+          f"raspon {summary['min_ms']}–{summary['max_ms']} ms "
+          f"({summary['merenja']} merenja)")
+    print(f"  temperatura na kraju {cpu_temperature()} C, "
+          f"throttled {throttled_state() or 'nepoznato'}")
     print(f"  nalazi -> {detections_path}")
     print(f"  vremena -> {timing_path}")
 
@@ -129,6 +137,9 @@ def main():
                         help="broj prolaza po slici za merenje vremena")
     parser.add_argument("--images", default=IMAGES_DIR,
                         help="mapa sa slikama skupa")
+    parser.add_argument("--cooldown", type=float, default=120.0,
+                        help="pauza u sekundama izmedju dva detektora, da "
+                             "drugi ne meri na zagrejanoj ploci; 0 iskljucuje")
     args = parser.parse_args()
 
     IMAGES_DIR = args.images
@@ -136,7 +147,13 @@ def main():
     image_names = list_images(IMAGES_DIR)
     names = [args.detector] if args.detector else list(AVAILABLE)
 
-    summaries = [run_detector(name, image_names, args.repeat) for name in names]
+    summaries = []
+    for index, name in enumerate(names):
+        if index and args.cooldown:
+            print(f"\nPauza {args.cooldown} s, da drugi detektor ne pocne "
+                  f"merenje na zagrejanoj ploci...")
+            time.sleep(args.cooldown)
+        summaries.append(run_detector(name, image_names, args.repeat))
 
     os.makedirs(RESULTS_DIR, exist_ok=True)
     timing_summary = os.path.join(RESULTS_DIR, "timing_summary.csv")

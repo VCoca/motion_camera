@@ -35,10 +35,16 @@ IMAGE_SUFFIXES = (".jpg", ".jpeg", ".png")
 # --------------------------------------------------------------------------
 # ucitavanje
 
-def load_ground_truth(images_dir, labels_dir):
+def load_ground_truth(images_dir, labels_dir, min_height=40.0):
     """Oznake u YOLO obliku: klasa cx cy w h, sve relativno prema dimenzijama
     slike. Slika bez oznaka (nema datoteke ili je prazna) je negativan primer
-    i bez njih nema preciznosti."""
+    i bez njih nema preciznosti.
+
+    Vraca {ime: (okviri, zanemareni_okviri)}. Zanemaren je okvir cija je
+    klasa razlicita od nule (tako se oznacavaju osobe zaklonjene vise od
+    polovine) i okvir nizi od min_height piksela. Po pravilima iz odeljka
+    6.3 rada, takvi okviri ne ulaze ni u odziv ni u preciznost: ne broje se
+    kao propustena detekcija, a nalaz koji padne na njih se odbacuje."""
     import cv2
 
     truth = {}
@@ -51,7 +57,7 @@ def load_ground_truth(images_dir, labels_dir):
             continue
         height, width = image.shape[:2]
 
-        boxes = []
+        boxes, ignored = [], []
         label_path = os.path.join(labels_dir, os.path.splitext(name)[0] + ".txt")
         if os.path.exists(label_path):
             with open(label_path) as handle:
@@ -59,14 +65,19 @@ def load_ground_truth(images_dir, labels_dir):
                     parts = line.split()
                     if len(parts) < 5:
                         continue
-                    _, cx, cy, bw, bh = (float(p) for p in parts[:5])
-                    boxes.append((
+                    class_id = int(float(parts[0]))
+                    cx, cy, bw, bh = (float(p) for p in parts[1:5])
+                    box = (
                         (cx - bw / 2) * width,
                         (cy - bh / 2) * height,
                         bw * width,
                         bh * height,
-                    ))
-        truth[name] = boxes
+                    )
+                    if class_id != 0 or box[3] < min_height:
+                        ignored.append(box)
+                    else:
+                        boxes.append(box)
+        truth[name] = (boxes, ignored)
 
     return truth
 
@@ -104,9 +115,27 @@ def iou(box_a, box_b):
     return intersection / union if union > 0 else 0.0
 
 
-def evaluate(truth, detections, iou_threshold):
-    """Vraca tacke krive: (prag, odziv, preciznost) po opadajucem skoru."""
-    total_gt = sum(len(boxes) for boxes in truth.values())
+def intersection_over_detection(box, area_box):
+    """Deo POVRSINE NALAZA koji pada u dati okvir. Za zanemarene okvire se
+    koristi ova mera, a ne IoU: nalaz koji pokriva samo deo zaklonjene osobe
+    ima mali IoU, ali svakako ne treba da se broji kao lazan."""
+    ax, ay, aw, ah = box
+    bx, by, bw, bh = area_box
+
+    left, top = max(ax, bx), max(ay, by)
+    right, bottom = min(ax + aw, bx + bw), min(ay + ah, by + bh)
+    if right <= left or bottom <= top:
+        return 0.0
+
+    intersection = (right - left) * (bottom - top)
+    own = aw * ah
+    return intersection / own if own > 0 else 0.0
+
+
+def evaluate(truth, detections, iou_threshold, ignore_overlap=0.5):
+    """Vraca (tacke, broj_okvira). Tacka je (prag, odziv, preciznost,
+    lazno_pozitivnih), po opadajucem skoru."""
+    total_gt = sum(len(boxes) for boxes, _ in truth.values())
     if total_gt == 0:
         raise SystemExit("Skup nema nijedan oznacen okvir.")
 
@@ -116,9 +145,10 @@ def evaluate(truth, detections, iou_threshold):
     points = []
     true_positives = 0
     false_positives = 0
+    discarded = 0
 
     for image, x, y, w, h, score in detections:
-        boxes = truth.get(image, [])
+        boxes, ignored = truth.get(image, ([], []))
 
         best_iou, best_index = 0.0, -1
         for index, gt_box in enumerate(boxes):
@@ -131,14 +161,19 @@ def evaluate(truth, detections, iou_threshold):
         if best_iou >= iou_threshold and best_index >= 0:
             matched[image].add(best_index)
             true_positives += 1
+        elif any(intersection_over_detection((x, y, w, h), box)
+                 >= ignore_overlap for box in ignored):
+            # Nalaz je pao na zanemaren okvir: ne broji se nikako.
+            discarded += 1
+            continue
         else:
             false_positives += 1
 
         recall = true_positives / total_gt
         precision = true_positives / (true_positives + false_positives)
-        points.append((score, recall, precision))
+        points.append((score, recall, precision, false_positives))
 
-    return points, total_gt
+    return points, total_gt, discarded
 
 
 def average_precision(points):
@@ -156,11 +191,12 @@ def average_precision(points):
 
 
 def operating_point(points, target_recall):
-    """Prva tacka na krivoj koja dostize ciljni odziv. Vraca (prag, odziv,
-    preciznost) ili None ako postupak taj odziv uopste ne dostize."""
-    for score, recall, precision in points:
-        if recall >= target_recall:
-            return score, recall, precision
+    """Prva tacka na krivoj koja dostize ciljni odziv. Vraca
+    (prag, odziv, preciznost, lazno_pozitivnih) ili None ako postupak taj
+    odziv uopste ne dostize."""
+    for point in points:
+        if point[1] >= target_recall:
+            return point
     return None
 
 
@@ -212,11 +248,11 @@ def write_pr_svg(curves, path, iou_threshold, target_recall):
                  f'y2="{top + plot_h}" stroke="#999" stroke-width="1" '
                  f'stroke-dasharray="4 3"/>')
     parts.append(f'<text x="{tx + 5:.1f}" y="{top + 14}" fill="#777">'
-                 f'ciljni odziv {target_recall:.2f}</text>')
+                 f'циљни одзив {target_recall:.2f}</text>')
 
     for index, (name, points, ap) in enumerate(curves):
         color = colors[index % len(colors)]
-        coords = " ".join(f"{sx(r):.1f},{sy(p):.1f}" for _, r, p in points)
+        coords = " ".join(f"{sx(pt[1]):.1f},{sy(pt[2]):.1f}" for pt in points)
         if coords:
             parts.append(f'<polyline points="{coords}" fill="none" '
                          f'stroke="{color}" stroke-width="2"/>')
@@ -227,13 +263,13 @@ def write_pr_svg(curves, path, iou_threshold, target_recall):
                      f'fill="#333">{name} · AP {ap:.3f}</text>')
 
     parts.append(f'<text x="{left + plot_w / 2:.0f}" y="{height - 22}" '
-                 f'text-anchor="middle" fill="#333">odziv</text>')
+                 f'text-anchor="middle" fill="#333">одзив</text>')
     parts.append(f'<text x="18" y="{top + plot_h / 2:.0f}" '
                  f'text-anchor="middle" fill="#333" '
                  f'transform="rotate(-90 18 {top + plot_h / 2:.0f})">'
-                 f'preciznost</text>')
+                 f'прецизност</text>')
     parts.append(f'<text x="{left}" y="18" fill="#666">'
-                 f'prag IoU = {iou_threshold:.2f}</text>')
+                 f'праг IoU = {iou_threshold:.2f}</text>')
     parts.append("</svg>")
 
     with open(path, "w") as handle:
@@ -250,6 +286,9 @@ def main():
                         help="odziv pri kome se porede preciznosti")
     parser.add_argument("--images", default=IMAGES_DIR)
     parser.add_argument("--labels", default=LABELS_DIR)
+    parser.add_argument("--min-height", type=float, default=40.0,
+                        help="okviri nizi od ovoliko piksela se zanemaruju "
+                             "(odeljak 6.3 rada)")
     args = parser.parse_args()
 
     if not os.path.isdir(args.labels):
@@ -258,12 +297,17 @@ def main():
             "Slike oznaciti alatom LabelImg u YOLO obliku."
         )
 
-    truth = load_ground_truth(args.images, args.labels)
-    positives = sum(1 for boxes in truth.values() if boxes)
-    total_gt = sum(len(boxes) for boxes in truth.values())
+    truth = load_ground_truth(args.images, args.labels, args.min_height)
+    positives = sum(1 for boxes, _ in truth.values() if boxes)
+    total_gt = sum(len(boxes) for boxes, _ in truth.values())
+    total_ignored = sum(len(ignored) for _, ignored in truth.values())
+    n_images = len(truth)
 
-    print(f"Skup: {len(truth)} slika, od toga {positives} sa osobom, "
-          f"{total_gt} oznacenih okvira, {len(truth) - positives} bez osobe")
+    print(f"Skup: {n_images} slika, od toga {positives} sa osobom, "
+          f"{total_gt} oznacenih okvira, {n_images - positives} bez osobe")
+    if total_ignored:
+        print(f"Zanemarenih okvira: {total_ignored} "
+              f"(klasa razlicita od 0 ili visina < {args.min_height:.0f} px)")
     print(f"Prag IoU {args.iou}, ciljni odziv {args.target_recall}\n")
 
     curves = []
@@ -276,41 +320,53 @@ def main():
             continue
 
         detections = load_detections(path)
-        points, _ = evaluate(truth, detections, args.iou)
+        points, _, discarded = evaluate(truth, detections, args.iou)
         ap = average_precision(points)
         best = operating_point(points, args.target_recall)
 
         curves.append((name, points, ap))
 
         max_recall = max((p[1] for p in points), default=0.0)
+        # Broj lazno pozitivnih po slici u radnoj tacki. Za sistem koji radi
+        # neprekidno ta velicina je razumljivija od same preciznosti
+        # (odeljak 6.5 rada).
+        fppi = best[3] / n_images if best else None
+
         row = {
             "detector": name,
             "nalaza": len(detections),
+            "odbacenih_na_zanemarenim": discarded,
             "AP": round(ap, 4),
             "najveci_odziv": round(max_recall, 4),
             "ciljni_odziv": args.target_recall,
             "prag_za_ciljni_odziv": round(best[0], 4) if best else "",
             "odziv_u_radnoj_tacki": round(best[1], 4) if best else "",
             "preciznost_u_radnoj_tacki": round(best[2], 4) if best else "",
+            "lazno_pozitivnih": best[3] if best else "",
+            "lazno_pozitivnih_po_slici": round(fppi, 4) if best else "",
         }
         rows.append(row)
 
         print(f"{name}:")
         print(f"  nalaza {len(detections)}, AP {ap:.3f}, "
               f"najveci dostignut odziv {max_recall:.3f}")
+        if discarded:
+            print(f"  odbaceno na zanemarenim okvirima: {discarded}")
         if best:
             print(f"  pri odzivu {best[1]:.3f} (prag {best[0]:.3f}) "
-                  f"preciznost je {best[2]:.3f}")
+                  f"preciznost je {best[2]:.3f}, "
+                  f"lazno pozitivnih po slici {fppi:.3f}")
         else:
             print(f"  ne dostize odziv {args.target_recall} ni pri jednom pragu")
 
         curve_path = os.path.join(RESULTS_DIR, f"pr_{name}.csv")
         with open(curve_path, "w", newline="") as handle:
             writer = csv.writer(handle)
-            writer.writerow(["prag", "odziv", "preciznost"])
-            for score, recall, precision in points:
+            writer.writerow(["prag", "odziv", "preciznost",
+                             "lazno_pozitivnih"])
+            for score, recall, precision, fp in points:
                 writer.writerow([f"{score:.6f}", f"{recall:.6f}",
-                                 f"{precision:.6f}"])
+                                 f"{precision:.6f}", fp])
         print(f"  kriva -> {curve_path}")
 
     if not rows:

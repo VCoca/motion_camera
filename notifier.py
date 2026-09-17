@@ -193,7 +193,8 @@ def _send(smtp, message):
         server.quit()
 
 
-def _send_in_background(smtp, recipient, event, image_path, suppressed):
+def _send_in_background(smtp, recipient, event, image_path, suppressed,
+                        previous_last_sent=0.0):
     state = load_state()
     try:
         message = build_message(smtp, recipient, event, image_path, suppressed)
@@ -203,7 +204,11 @@ def _send_in_background(smtp, recipient, event, image_path, suppressed):
         state["last_error"] = ""
         print(f"obavestenje poslato na {recipient}", flush=True)
     except Exception as error:               # noqa: BLE001
-        # Neuspeh slanja ne sme da obori nadzor prostorije.
+        # Neuspeh slanja ne sme da obori nadzor prostorije. Vreme poslednjeg
+        # slanja se vraca na staro: upisano je unapred da dve brze detekcije
+        # ne posalju dvaput, ali ako slanje nije uspelo, prolazna greska
+        # servera ne treba da potrosi ceo interval vremenske zabrane.
+        state["last_sent"] = previous_last_sent
         state["last_error"] = f"{type(error).__name__}: {error}"
         print(f"obavestenje nije poslato: {state['last_error']}", flush=True)
     save_state(state)
@@ -235,13 +240,15 @@ def notify_person(event, image_path=None):
     # Vreme poslednjeg slanja se upisuje odmah, pre nego sto nit zavrsi,
     # da dve brze detekcije ne pokrenu dva slanja uporedo.
     suppressed = int(state.get("suppressed", 0))
+    previous_last_sent = float(state.get("last_sent", 0) or 0)
     state["last_sent"] = time.time()
     state["suppressed"] = 0
     save_state(state)
 
     thread = threading.Thread(
         target=_send_in_background,
-        args=(smtp, recipient, dict(event), image_path, suppressed),
+        args=(smtp, recipient, dict(event), image_path, suppressed,
+              previous_last_sent),
         daemon=True,
     )
     with _lock:

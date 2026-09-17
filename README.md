@@ -47,7 +47,7 @@ lažna impulsa, pa se okidanja u tom vremenu odbacuju (`WARMUP_S`).
 | `main.py` | glavna petlja i merenje vremena t0–t3 |
 | `sensor.py` | HC-SR501, čekanje na ivicu, odbacivanje inicijalizacije |
 | `camera.py` | otvaranje kamere po okidanju, pražnjenje bafera, upis slike |
-| `detectors/` | zajednički interfejs, `hog.py` i `yolo.py` |
+| `detectors/` | zajednički interfejs i merenje vremena, `hog.py` i `yolo.py` |
 | `logger.py` | evidencija u `logs/events.csv`, stanje sistema |
 | `led.py` | indikatorska dioda |
 | `notifier.py` | obaveštenje poštom, vremenska zabrana, podešavanja |
@@ -81,6 +81,23 @@ python3 eval/bench.py
 # 4. mere i krive
 python3 eval/metrics.py --iou 0.5 --target-recall 0.90
 ```
+
+Scenario se zadaje pri prikupljanju (`--scenario 4m-popreko-dnevno`) i upisuje
+u `logs/frames.csv` uz svaku sliku. Bez toga se posle snimanja ne može
+rekonstruisati koja slika pripada kojoj kombinaciji rastojanja, smera i
+osvetljenja.
+
+Radna tačka se bira **posebno za svaki detektor**, jer skorovi nisu ista
+veličina. Posle vrednovanja se vrednosti iz kolone `prag_za_ciljni_odziv` u
+`results/metrics_summary.csv` upisuju u `SCORE_THRESHOLD` u `config.py`.
+
+Okviri označeni klasom različitom od nule i okviri niži od 40 piksela
+**zanemaruju se**: ne broje se kao propuštena detekcija, a nalaz koji padne na
+njih se odbacuje.
+
+Vreme zaključivanja meri `base.Detector`, jednako za oba postupka: u njega
+ulazi sve od ulazne slike do konačne liste nalaza, dakle i priprema ulaza i
+obrada izlaza mreže, a ne samo prolaz kroz mrežu.
 
 Rezultati se upisuju u `results/`: nalazi i vremena po detektoru,
 `metrics_summary.csv` i kriva preciznosti i odziva `pr_curve.svg`.
@@ -157,3 +174,4 @@ Tri stvari koje određuju izvedbu:
   može biti otkrivena. Na 640 × 480 to je 27 % visine kadra.
 - Galerija na veb strani učitava sve slike; nema umanjenih prikaza ni stranica.
 - Nema brisanja starih snimaka, pa pri dužem radu treba pratiti prostor.
+- `pir_test.py` je samostalna provera ožičenja senzora; ne ulazi u rad sistema.

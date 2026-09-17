@@ -12,7 +12,7 @@ trenutka, iz kojih slede sva vremena potrebna za merenja u radu:
 Pokretanje:
     python3 main.py                          radni rezim, detektor iz config.py
     python3 main.py --detector yolo
-    python3 main.py --save-mode all          rezim prikupljanja skupa podataka
+    python3 main.py --save-mode all --scenario 4m-popreko-dnevno
 """
 
 import argparse
@@ -26,7 +26,7 @@ from camera import (capture_frame, draw_boxes, release_camera,
                     release_if_idle, save_frame)
 from detectors import AVAILABLE, create_detector, filter_by_score
 from led import led_off, led_on, led_close
-from logger import log_event, write_status
+from logger import log_event, log_frame, write_status
 from notifier import notify_person, wait_for_pending
 from sensor import PirSensor
 
@@ -39,15 +39,19 @@ def parse_args():
                         help="'all' cuva svaki kadar posle okidanja, bez "
                              "iscrtanih okvira, za skup podataka")
     parser.add_argument("--threshold", type=float, default=None,
-                        help="prag mere poverenja (radna tacka)")
+                        help="prag mere poverenja (radna tacka); vazi za "
+                             "detektor koji je pokrenut, jer skorovi dva "
+                             "postupka nisu ista velicina")
+    parser.add_argument("--scenario", default="",
+                        help="oznaka uslova snimanja, npr. 4m-popreko-dnevno; "
+                             "upisuje se u logs/frames.csv uz svaku sliku "
+                             "prikupljenu u rezimu --save-mode all")
     parser.add_argument("--warmup", type=float, default=None,
                         help="vreme inicijalizacije senzora u sekundama")
     args = parser.parse_args()
 
     if args.save_mode is not None:
         config.SAVE_MODE = args.save_mode
-    if args.threshold is not None:
-        config.SCORE_THRESHOLD = args.threshold
     if args.warmup is not None:
         config.WARMUP_S = args.warmup
 
@@ -65,9 +69,16 @@ def main():
     detector = create_detector(args.detector)
     sensor = PirSensor()
 
+    # Prag vazi za pokrenuti detektor. Zadat u komandnoj liniji ima prednost
+    # nad onim iz config.SCORE_THRESHOLD.
+    threshold = (args.threshold if args.threshold is not None
+                 else config.score_threshold(detector.name))
+
     print(f"Detektor:     {detector.describe()}")
     print(f"Rezim cuvanja: {config.SAVE_MODE}")
-    print(f"Prag:          {config.SCORE_THRESHOLD}")
+    print(f"Prag ({detector.name}): {threshold}")
+    if config.SAVE_MODE == "all":
+        print(f"Scenario:      {args.scenario or '(nije zadat)'}")
     print(f"Inicijalizacija senzora: {sensor.warmup_remaining():.0f} s "
           f"(okidanja u tom vremenu se odbacuju)")
     print("Cekam pokret...\n")
@@ -100,7 +111,7 @@ def main():
             height, width = frame.shape[:2]
 
             detections, infer_ms = detector.detect(frame)
-            detections = filter_by_score(detections, config.SCORE_THRESHOLD)
+            detections = filter_by_score(detections, threshold)
             found = len(detections) > 0
 
             image = ""
@@ -108,6 +119,9 @@ def main():
                 # Za skup podataka se cuva neizmenjen kadar: iscrtani okviri
                 # bi kvarili kasnije oznacavanje.
                 image = save_frame(frame, prefix="frame")
+                log_frame(image, scenario=args.scenario, width=width,
+                          height=height,
+                          decision="person" if found else "no_person")
             elif found:
                 draw_boxes(frame, detections)
                 image = save_frame(frame, prefix="person")

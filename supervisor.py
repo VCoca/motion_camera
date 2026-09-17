@@ -114,7 +114,7 @@ def status():
         if pid is None:
             return {"running": False, "external": False, "pid": None,
                     "detector": None, "save_mode": None, "threshold": None,
-                    "started_at": None}
+                    "scenario": "", "started_at": None}
 
         return {
             "running": True,
@@ -123,6 +123,7 @@ def status():
             "detector": _argument_after(parts, "--detector", "podrazumevani"),
             "save_mode": _argument_after(parts, "--save-mode", "person"),
             "threshold": _argument_after(parts, "--threshold"),
+            "scenario": _argument_after(parts, "--scenario", ""),
             "started_at": None,
         }
 
@@ -131,7 +132,7 @@ def status():
     return record
 
 
-def start(detector="hog", save_mode="person", threshold=None):
+def start(detector="hog", save_mode="person", threshold=None, scenario=""):
     """Pokrece glavnu petlju. Vraca (uspeh, poruka)."""
     current = status()
     if current["running"]:
@@ -152,6 +153,8 @@ def start(detector="hog", save_mode="person", threshold=None):
                "--detector", detector, "--save-mode", save_mode]
     if threshold is not None:
         command += ["--threshold", str(threshold)]
+    if scenario:
+        command += ["--scenario", scenario]
 
     os.makedirs(config.LOG_FOLDER, exist_ok=True)
     log_handle = open(SYSTEM_LOG, "a")
@@ -180,11 +183,17 @@ def start(detector="hog", save_mode="person", threshold=None):
                        "ispod; najcesci uzrok je da glavna petlja vec radi u "
                        "terminalu i drzi GPIO liniju.")
 
+    # Dnevnik je dalje otvoren u detetu, koje ima svoj deskriptor; ovaj u
+    # serveru se zatvara, jer bi se inace pri svakom pokretanju zadrzao
+    # jedan otvoren deskriptor.
+    log_handle.close()
+
     _write_record({
         "pid": process.pid,
         "detector": detector,
         "save_mode": save_mode,
         "threshold": threshold,
+        "scenario": scenario,
         "started_at": datetime.now().strftime("%d.%m.%Y %H:%M:%S"),
     })
     return True, f"Sistem pokrenut, detektor {detector}."
@@ -221,10 +230,13 @@ def stop(timeout=12.0):
     return True, "Sistem nije odgovorio na zahtev za gasenje, pa je prekinut."
 
 
-def restart(detector, save_mode="person", threshold=None):
+def restart(detector, save_mode="person", threshold=None, scenario=""):
+    """Prag se prosledjuje dalje: bez toga bi promena detektora u toku rada
+    tiho vratila prag na podrazumevani, a radna tacka je ono oko cega se
+    ceo rad vrti."""
     if status()["running"]:
         stop()
-    return start(detector, save_mode, threshold)
+    return start(detector, save_mode, threshold, scenario)
 
 
 def tail_log(lines=20):
