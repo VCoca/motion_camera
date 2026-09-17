@@ -16,6 +16,7 @@ Pokretanje:
 """
 
 import argparse
+import os
 import signal
 import sys
 import time
@@ -26,6 +27,7 @@ from camera import (capture_frame, draw_boxes, release_camera,
 from detectors import AVAILABLE, create_detector, filter_by_score
 from led import led_off, led_on, led_close
 from logger import log_event, write_status
+from notifier import notify_person, wait_for_pending
 from sensor import PirSensor
 
 
@@ -113,7 +115,7 @@ def main():
             total_ms = (time.monotonic() - t0) * 1000.0
             max_score = detections[0].score if found else None
 
-            log_event(
+            event = log_event(
                 detector=detector.name,
                 width=width, height=height,
                 t_capture_ms=capture_ms,
@@ -125,10 +127,18 @@ def main():
                 image=image,
             )
 
+            # Obavestenje se salje tek posle merenja i upisa, i to u
+            # zasebnoj niti, da SMTP razmena ne ude u vreme odziva.
+            notice = ""
+            if found:
+                image_path = (os.path.join(config.PHOTO_FOLDER, image)
+                              if image else None)
+                notice = " | posta: " + notify_person(event, image_path)
+
             print(f"okidanje | akvizicija {capture_ms:6.1f} ms | "
                   f"detekcija {infer_ms:6.1f} ms | ukupno {total_ms:6.1f} ms | "
                   f"{'osoba: ' + str(len(detections)) if found else 'nema osobe'}"
-                  f"{' | ' + image if image else ''}", flush=True)
+                  f"{' | ' + image if image else ''}{notice}", flush=True)
 
             sensor.wait_for_no_motion(timeout=30)
             led_off()
@@ -143,6 +153,7 @@ def main():
             print(f"Odbaceno okidanja u inicijalizaciji: "
                   f"{sensor.discarded_in_warmup}")
         write_status("Stopped", detector.name)
+        wait_for_pending()
         led_off()
         led_close()
         release_camera()

@@ -19,6 +19,16 @@
 
 <h1>📷 Sistem za detekciju prisustva osoba</h1>
 
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+  <div class="flashes">
+    {% for category, message in messages %}
+      <p class="flash {{ category }}">{{ message }}</p>
+    {% endfor %}
+  </div>
+  {% endif %}
+{% endwith %}
+
 <div class="stats">
 
 <div class="card">
@@ -56,6 +66,139 @@
 
 </div>
 
+<div class="panel">
+
+<h2>Upravljanje sistemom</h2>
+
+{% if process.running %}
+<p class="sub">
+    <span class="tag ok">radi</span>
+    {% if process.external %}<span class="tag bad">pokrenuta izvan ove strane</span>{% endif %}
+    detektor <b>{{ process.detector }}</b> ·
+    režim čuvanja <b>{{ process.save_mode }}</b>
+    {% if process.threshold is not none %} · prag <b>{{ process.threshold }}</b>{% endif %}
+    {% if process.started_at %} · pokrenut {{ process.started_at }}{% endif %}
+    · proces {{ process.pid }}
+</p>
+
+<form method="post" action="{{ url_for('system_restart') }}" class="controls">
+    <label for="detector_r">Promeni detektor</label>
+    <select id="detector_r" name="detector">
+    {% for d in detectors %}
+        <option value="{{ d }}" {% if d == process.detector %}selected{% endif %}>{{ d }}</option>
+    {% endfor %}
+    </select>
+
+    <label for="save_mode_r">Režim čuvanja</label>
+    <select id="save_mode_r" name="save_mode">
+        <option value="person" {% if process.save_mode == 'person' %}selected{% endif %}>samo kada je osoba nađena</option>
+        <option value="all" {% if process.save_mode == 'all' %}selected{% endif %}>svaki kadar (prikupljanje skupa)</option>
+    </select>
+
+    <button type="submit" class="save">↻ Primeni i ponovo pokreni</button>
+</form>
+
+<form method="post" action="{{ url_for('system_stop') }}" class="controls">
+    <button type="submit">■ Zaustavi sistem</button>
+</form>
+
+{% else %}
+<p class="sub"><span class="tag">zaustavljen</span> nadzor prostorije ne radi</p>
+
+<form method="post" action="{{ url_for('system_start') }}" class="controls">
+    <label for="detector">Detektor</label>
+    <select id="detector" name="detector">
+    {% for d in detectors %}
+        <option value="{{ d }}">{{ d }}</option>
+    {% endfor %}
+    </select>
+
+    <label for="save_mode">Režim čuvanja</label>
+    <select id="save_mode" name="save_mode">
+        <option value="person">samo kada je osoba nađena</option>
+        <option value="all">svaki kadar (prikupljanje skupa)</option>
+    </select>
+
+    <label for="threshold">Prag poverenja (prazno = bez praga)</label>
+    <input type="text" id="threshold" name="threshold" placeholder="npr. 0.6">
+
+    <button type="submit" class="save">▶ Pokreni sistem</button>
+</form>
+{% endif %}
+
+{% if system_log %}
+<details class="log">
+    <summary>Dnevnik rada ({{ system_log | length }} poslednjih redova)</summary>
+    <pre>{% for line in system_log %}{{ line }}{% endfor %}</pre>
+</details>
+{% endif %}
+
+<p class="sub">
+    Prvi minut po pokretanju senzor je u inicijalizaciji i okidanja se
+    odbacuju.
+</p>
+
+</div>
+
+<div class="panel">
+
+<h2>Obaveštenje elektronskom poštom</h2>
+
+<form method="post" action="{{ url_for('settings') }}" class="settings">
+
+    <label for="email">Adresa primaoca</label>
+    <input type="email" id="email" name="email" value="{{ notify.email }}"
+           placeholder="ime@primer.com" autocomplete="email">
+
+    <label for="cooldown_min">Najkraći razmak između obaveštenja (min)</label>
+    <input type="number" id="cooldown_min" name="cooldown_min" min="0" step="0.5"
+           value="{{ notify.cooldown_min }}">
+
+    <label class="switch">
+        <input type="checkbox" id="enabled" name="enabled"
+               {% if notify.enabled %}checked{% endif %}>
+        Šalji obaveštenje kada se otkrije osoba
+    </label>
+
+    <button type="submit" class="save">Sačuvaj</button>
+
+</form>
+
+<form method="post" action="{{ url_for('test_mail') }}" class="controls">
+    <button type="submit">✉ Pošalji probnu poruku</button>
+</form>
+
+<p class="sub">
+    Stanje:
+    {% if notify.enabled %}
+        <span class="tag ok">uključeno</span>
+    {% else %}
+        <span class="tag">isključeno</span>
+    {% endif %}
+
+    {% if not notify.smtp_ok %}
+        <span class="tag bad">nalog za slanje nije podešen</span>
+    {% endif %}
+
+    {% if notify.last_sent %}
+        &middot; poslednje poslato: {{ notify.last_sent }}
+    {% endif %}
+
+    {% if notify.wait_min > 0 %}
+        &middot; sledeće moguće za {{ notify.wait_min }} min
+    {% endif %}
+
+    {% if notify.suppressed %}
+        &middot; {{ notify.suppressed }} detekcija zadržano zbog razmaka
+    {% endif %}
+</p>
+
+{% if notify.last_error %}
+<p class="sub bad">Poslednja greška pri slanju: {{ notify.last_error }}</p>
+{% endif %}
+
+</div>
+
 <p class="time">
     Poslednja detekcija: {{ last_time }} &nbsp;·&nbsp;
     Vreme na ploci: {{ current_time }}
@@ -63,6 +206,11 @@
 
 <div class="buttons">
     <a class="link" href="{{ url_for('events_csv') }}">⤓ Preuzmi evidenciju (CSV)</a>
+
+    <form method="post" action="{{ url_for('clear_events') }}"
+          onsubmit="return confirm('Obrisati evidenciju merenja?');">
+        <button type="submit">🧹 Obriši evidenciju</button>
+    </form>
 
     <form method="post" action="{{ url_for('delete_all') }}"
           onsubmit="return confirm('Obrisati sve slike?');">

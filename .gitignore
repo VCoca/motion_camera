@@ -16,3 +16,7 @@ results/
 # Skup podataka: slike se ne drze u repozitorijumu, oznake se drze
 eval/dataset/images/*
 !eval/dataset/images/.gitkeep
+
+# Pristupni podaci naloga za slanje poste i podesavanja korisnika
+smtp.json
+settings.json

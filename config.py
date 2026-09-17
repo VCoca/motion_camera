@@ -59,10 +59,26 @@ YOLO_PERSON_CLASS = 0        # indeks klase "person" u COCO skupu
 # "all"    -> cuva se svaki kadar posle okidanja (rezim prikupljanja skupa)
 SAVE_MODE = "person"
 
+# --- Obavestavanje elektronskom postom ---
+# Prekidac i adresa primaoca zadaju se na veb strani i cuvaju u ovoj
+# datoteci; glavna petlja ih cita pri svakoj detekciji.
+SETTINGS_FILE = os.path.join(BASE_DIR, "settings.json")
+
+# Pristupni podaci naloga sa koga se salje. Drze se odvojeno od
+# podesavanja koja zadaje korisnik, i nikada se ne prikazuju na strani.
+# Mogu se zadati i promenljivama okruzenja SMTP_HOST, SMTP_PORT,
+# SMTP_USER, SMTP_PASSWORD, SMTP_FROM.
+SMTP_FILE = os.path.join(BASE_DIR, "smtp.json")
+
+# Najkrace vreme izmedju dva obavestenja, da se posta ne salje na svako
+# okidanje. Podrazumevano pet minuta; menja se na veb strani.
+NOTIFY_COOLDOWN_S = 300
+
 PHOTO_FOLDER = os.path.join(BASE_DIR, "photos")
 LOG_FOLDER = os.path.join(BASE_DIR, "logs")
 EVENT_CSV = os.path.join(LOG_FOLDER, "events.csv")
 STATUS_FILE = os.path.join(BASE_DIR, "status.txt")
+NOTIFY_STATE_FILE = os.path.join(LOG_FOLDER, "notify_state.json")
 
 JPEG_QUALITY = 90
 

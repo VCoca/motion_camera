@@ -283,3 +283,242 @@ a.link{
 }
 
 a.link:hover{ text-decoration:underline; }
+/* --- obavestavanje postom --- */
+
+.panel{
+
+    background:#2e2e2e;
+
+    border-radius:10px;
+
+    padding:20px 24px;
+
+    margin:30px auto;
+
+    max-width:640px;
+
+}
+
+.panel h2{
+
+    margin-top:0;
+
+    font-size:18px;
+
+}
+
+form.settings{
+
+    display:flex;
+
+    flex-direction:column;
+
+    gap:8px;
+
+}
+
+form.settings label{
+
+    font-size:13px;
+
+    color:#9aa3a8;
+
+}
+
+form.settings input[type=email],
+
+form.settings input[type=number]{
+
+    background:#1f1f1f;
+
+    border:1px solid #444;
+
+    border-radius:6px;
+
+    color:white;
+
+    padding:10px;
+
+    font-size:15px;
+
+}
+
+form.settings input:focus{
+
+    outline:2px solid #9ecbd6;
+
+    outline-offset:1px;
+
+}
+
+label.switch{
+
+    display:flex;
+
+    align-items:center;
+
+    gap:10px;
+
+    color:white;
+
+    font-size:14px;
+
+    margin-top:6px;
+
+    cursor:pointer;
+
+}
+
+label.switch input{
+
+    width:18px;
+
+    height:18px;
+
+    accent-color:#7cc79b;
+
+}
+
+button.save{
+
+    background:#2f7d4f;
+
+    margin-top:12px;
+
+    align-self:flex-start;
+
+    padding:10px 22px;
+
+    font-size:15px;
+
+}
+
+button.save:hover{ background:#379a61; }
+
+.flash{
+
+    padding:10px 14px;
+
+    border-radius:8px;
+
+    font-size:14px;
+
+}
+
+.flash.ok{ background:#1f4a33; color:#9fe0bb; }
+
+.flash.bad{ background:#4a2320; color:#f0a9a4; }
+
+.panel p.sub{
+
+    font-size:13px;
+
+    color:#9aa3a8;
+
+}
+
+.panel p.sub.bad{ color:#f0a9a4; }
+
+/* --- upravljacka tabla --- */
+
+.flashes{
+
+    max-width:640px;
+
+    margin:0 auto 10px;
+
+    display:flex;
+
+    flex-direction:column;
+
+    gap:8px;
+
+}
+
+form.controls{
+
+    display:flex;
+
+    flex-wrap:wrap;
+
+    align-items:center;
+
+    gap:10px;
+
+    margin:14px 0;
+
+}
+
+form.controls label{
+
+    font-size:13px;
+
+    color:#9aa3a8;
+
+}
+
+form.controls select,
+
+form.controls input[type=text]{
+
+    background:#1f1f1f;
+
+    border:1px solid #444;
+
+    border-radius:6px;
+
+    color:white;
+
+    padding:8px 10px;
+
+    font-size:14px;
+
+}
+
+form.controls button{
+
+    padding:9px 18px;
+
+    font-size:14px;
+
+}
+
+form.controls button.save{ margin-top:0; }
+
+details.log{
+
+    margin-top:14px;
+
+    background:#1f1f1f;
+
+    border-radius:8px;
+
+    padding:10px 14px;
+
+}
+
+details.log summary{
+
+    cursor:pointer;
+
+    font-size:13px;
+
+    color:#9ecbd6;
+
+}
+
+details.log pre{
+
+    font-size:12px;
+
+    color:#c9d1d6;
+
+    overflow-x:auto;
+
+    white-space:pre-wrap;
+
+    word-break:break-word;
+
+    margin:10px 0 0;
+
+}

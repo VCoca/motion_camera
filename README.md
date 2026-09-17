@@ -50,6 +50,8 @@ lažna impulsa, pa se okidanja u tom vremenu odbacuju (`WARMUP_S`).
 | `detectors/` | zajednički interfejs, `hog.py` i `yolo.py` |
 | `logger.py` | evidencija u `logs/events.csv`, stanje sistema |
 | `led.py` | indikatorska dioda |
+| `notifier.py` | obaveštenje poštom, vremenska zabrana, podešavanja |
+| `supervisor.py` | pokretanje i zaustavljanje glavne petlje sa strane |
 | `app.py` | veb sloj (Flask) |
 | `eval/` | vrednovanje van linije: `bench.py`, `metrics.py` |
 
@@ -86,6 +88,68 @@ Rezultati se upisuju u `results/`: nalazi i vremena po detektoru,
 Poređenje se vrši **pri uporedivom odzivu**, a ne pri podrazumevanim pragovima,
 jer skorovi dva postupka nisu ista veličina: kod YOLO-a je to verovatnoća klase,
 a kod HOG-a vrednost odlučujuće funkcije SVM-a.
+
+## Upravljanje sa veb strane
+
+Sve radnje mogu se izvesti iz pregledača, bez terminala:
+
+| Radnja | Gde |
+|--------|-----|
+| pokretanje i zaustavljanje nadzora | Upravljanje sistemom |
+| izbor detektora (`hog` / `yolo`) | isto, pri pokretanju ili preko „Primeni i ponovo pokreni" |
+| režim čuvanja (`person` / `all`) | isto |
+| prag poverenja | isto, prazno polje znači bez praga |
+| dnevnik rada glavne petlje | isto, „Dnevnik rada" |
+| adresa primaoca, prekidač i razmak poruka | Obaveštenje elektronskom poštom |
+| probna poruka | isto, dugme „Pošalji probnu poruku" |
+| preuzimanje evidencije | dugmad na dnu |
+| brisanje evidencije i slika | isto |
+
+Veb proces ne poziva glavnu petlju nego je pokreće kao **poseban proces**,
+jer petlja drži GPIO linije i kameru dok server usužuje zahteve. Broj procesa
+se pamti u `logs/main.pid`, pa stanje preživi i ponovno pokretanje servera.
+
+Detektor se bira pri pokretanju, pa njegova promena znači zaustavljanje i
+ponovno podizanje petlje — dugme to radi u jednom koraku.
+
+**GPIO linija se ne zaključava**, pa se dve petlje mogu pokrenuti uporedo i
+otimati se o kameru. Zato strana traži glavnu petlju među procesima, a ne samo
+u svom zapisu: petlja pokrenuta iz terminala prikazuje se kao „pokrenuta izvan
+ove strane" i pokretanje druge se odbija.
+
+Strana nema prijavu, pa svako na istoj mreži može da pokrene i zaustavi
+sistem. Za rad u zatvorenoj kućnoj mreži to je prihvatljivo; za bilo šta drugo
+bi trebalo dodati proveru identiteta.
+
+## Obaveštenje elektronskom poštom
+
+Kada detektor nađe osobu, sistem može da pošalje poruku sa slikom u prilogu.
+Adresa primaoca, prekidač i najkraći razmak između poruka zadaju se na veb
+strani i čuvaju u `settings.json`.
+
+Pristupni podaci naloga sa koga se šalje drže se **odvojeno**, u `smtp.json`,
+i nikada se ne prikazuju na strani:
+
+```bash
+cp smtp.example.json smtp.json
+nano smtp.json          # uneti nalog i lozinku za aplikaciju
+```
+
+Za Gmail je potrebna lozinka za aplikaciju (dvostepena provera mora biti
+uključena), ne obična lozinka naloga. Umesto datoteke mogu se zadati i
+promenljive okruženja `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`
+i `SMTP_FROM`.
+
+Tri stvari koje određuju izvedbu:
+
+- **Slanje ide u zasebnoj niti.** SMTP razmena traje i po nekoliko sekundi, a
+  vreme odziva sistema (t₃ − t₀) meri se za rad, pa slanje ne sme da uđe u taj
+  put. Izmereni odziv ostaje isti bez obzira na to da li se poruka šalje.
+- **Vremenska zabrana**, podrazumevano 5 minuta, sprečava da neprekidan pokret
+  pošalje desetine poruka. Detekcije u tom vremenu se broje i njihov broj ulazi
+  u sledeću poruku.
+- **Neuspeh slanja ne obara nadzor.** Greška se zapisuje i prikazuje na strani,
+  a petlja nastavlja da radi.
 
 ## Poznata ograničenja
 
