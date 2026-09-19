@@ -17,6 +17,7 @@ def create_detector(name=None):
             win_stride=config.HOG_WIN_STRIDE,
             padding=config.HOG_PADDING,
             scale=config.HOG_SCALE,
+            box_shrink=config.HOG_BOX_SHRINK,
         )
 
     if name == "yolo":

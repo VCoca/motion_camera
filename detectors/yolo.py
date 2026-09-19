@@ -85,7 +85,14 @@ class YoloDetector(Detector):
         detections = []
         for i in np.asarray(indices).reshape(-1):
             x, y, w, h = boxes[int(i)]
-            detections.append(Detection(int(x), int(y), int(w), int(h),
+            # Mreza daje i okvire koji izlaze iz kadra, pa i negativne
+            # koordinate; odsecaju se, da povrsina okvira u meri slaganja
+            # bude ona koja se zaista vidi na slici.
+            x0, y0 = max(0, int(x)), max(0, int(y))
+            x1, y1 = min(width, int(x + w)), min(height, int(y + h))
+            if x1 <= x0 or y1 <= y0:
+                continue
+            detections.append(Detection(x0, y0, x1 - x0, y1 - y0,
                                         float(scores[int(i)])))
         return detections
 
