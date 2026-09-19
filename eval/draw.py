@@ -1,0 +1,176 @@
+"""Iscrtavanje nalaza i tacnih okvira preko slika skupa.
+
+Merenje upisuje polozaje okvira u results/detections_*.csv, ali ne iscrtava
+nista, da upis slika ne bi ulazio u izmereno vreme. Ovaj skript radi
+iscrtavanje naknadno, iz vec upisanih datoteka, pa se moze pokrenuti koliko
+god puta bez ponovnog merenja.
+
+Sluzi trima stvarima:
+
+1. Provera oznacavanja. Tacni okviri se iscrtaju preko slika pa se prelistaju;
+   pogresno nacrtan ili zaboravljen okvir vidi se za sekundu, a u datoteci sa
+   brojevima ne vidi se nikako.
+2. Uvid u ponasanje postupaka. Na istoj slici vide se nalazi oba, pa je
+   odmah jasno gde se razilaze.
+3. Primeri za rad. Odeljak 7.6 trazi po jedan pogodak i jedan promasaj za
+   svaki postupak; ove slike su upravo to.
+
+Boje:  beli okvir = tacan,  isprekidan beli = zanemaren,
+       crveni = HOG,  zeleni = YOLO.
+
+Pokretanje:
+    python3 eval/draw.py                      sve slike, oba postupka
+    python3 eval/draw.py --detector yolo
+    python3 eval/draw.py --min-score 0.5      samo nalazi iznad praga
+    python3 eval/draw.py --only-truth         samo provera oznacavanja
+
+Isto se dobija i uz samo merenje:
+    python3 eval/bench.py --iscrtaj
+"""
+
+import argparse
+import csv
+import os
+import sys
+from collections import defaultdict
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+import cv2  # noqa: E402
+
+import config  # noqa: E402
+from camera import draw_boxes  # noqa: E402
+from detectors.base import Detection  # noqa: E402
+
+EVAL_DIR = os.path.dirname(os.path.abspath(__file__))
+IMAGES_DIR = os.path.join(EVAL_DIR, "dataset", "images")
+LABELS_DIR = os.path.join(EVAL_DIR, "dataset", "labels")
+RESULTS_DIR = os.path.join(config.BASE_DIR, "results")
+OUT_DIR = os.path.join(RESULTS_DIR, "pregled")
+
+COLORS = {"hog": (60, 60, 230), "yolo": (80, 220, 80)}   # BGR
+TRUTH_COLOR = (255, 255, 255)
+
+IMAGE_SUFFIXES = (".jpg", ".jpeg", ".png")
+
+
+def load_truth(name, width, height, labels_dir):
+    """Cita oznake u obliku YOLO i vraca (tacni, zanemareni) u pikselima."""
+    path = os.path.join(labels_dir, os.path.splitext(name)[0] + ".txt")
+    boxes, ignored = [], []
+    if not os.path.exists(path):
+        return boxes, ignored
+    with open(path) as handle:
+        for line in handle:
+            parts = line.split()
+            if len(parts) < 5:
+                continue
+            cls = int(float(parts[0]))
+            cx, cy, bw, bh = (float(p) for p in parts[1:5])
+            box = (int(round((cx - bw / 2) * width)),
+                   int(round((cy - bh / 2) * height)),
+                   int(round(bw * width)), int(round(bh * height)))
+            (ignored if cls != 0 else boxes).append(box)
+    return boxes, ignored
+
+
+def load_detections(path):
+    """Cita nalaze jednog postupka i grupise ih po imenu slike."""
+    table = defaultdict(list)
+    if not os.path.exists(path):
+        return table
+    with open(path, newline="") as handle:
+        for row in csv.DictReader(handle):
+            table[row["image"]].append(Detection(
+                int(float(row["x"])), int(float(row["y"])),
+                int(float(row["w"])), int(float(row["h"])),
+                float(row["score"]),
+            ))
+    return table
+
+
+def _dashed(image, box, color, thickness=2, step=10):
+    x, y, w, h = box
+    for i in range(x, x + w, step * 2):
+        cv2.line(image, (i, y), (min(i + step, x + w), y), color, thickness)
+        cv2.line(image, (i, y + h), (min(i + step, x + w), y + h), color, thickness)
+    for i in range(y, y + h, step * 2):
+        cv2.line(image, (x, i), (x, min(i + step, y + h)), color, thickness)
+        cv2.line(image, (x + w, i), (x + w, min(i + step, y + h)), color, thickness)
+
+
+def render(images_dir=IMAGES_DIR, labels_dir=LABELS_DIR, out_dir=OUT_DIR,
+           detectors=("hog", "yolo"), min_score=0.0, only_truth=False,
+           quiet=False):
+    """Iscrtava i upisuje slike. Vraca broj obradjenih slika."""
+    if not os.path.isdir(images_dir):
+        raise SystemExit(f"Nema mape sa slikama: {images_dir}")
+    names = [n for n in sorted(os.listdir(images_dir))
+             if n.lower().endswith(IMAGE_SUFFIXES)]
+    if not names:
+        raise SystemExit(f"Mapa {images_dir} je prazna.")
+
+    tables = {}
+    if not only_truth:
+        for det_name in detectors:
+            path = os.path.join(RESULTS_DIR, f"detections_{det_name}.csv")
+            if not os.path.exists(path):
+                if not quiet:
+                    print(f"  nema {path}, preskace se "
+                          f"(pokrenuti prvo eval/bench.py)")
+                continue
+            tables[det_name] = load_detections(path)
+
+    os.makedirs(out_dir, exist_ok=True)
+    bez_oznaka = 0
+
+    for name in names:
+        image = cv2.imread(os.path.join(images_dir, name))
+        if image is None:
+            continue
+        height, width = image.shape[:2]
+
+        truth, ignored = load_truth(name, width, height, labels_dir)
+        if not truth and not ignored:
+            bez_oznaka += 1
+
+        for box in truth:
+            cv2.rectangle(image, (box[0], box[1]),
+                          (box[0] + box[2], box[1] + box[3]), TRUTH_COLOR, 2)
+        for box in ignored:
+            _dashed(image, box, TRUTH_COLOR)
+
+        for det_name, table in tables.items():
+            found = [d for d in table.get(name, []) if d.score >= min_score]
+            draw_boxes(image, found, color=COLORS[det_name],
+                       prefix=f"{det_name} ")
+
+        cv2.imwrite(os.path.join(out_dir, name), image)
+
+    if not quiet:
+        print(f"Iscrtano {len(names)} slika -> {out_dir}")
+        print(f"Bez ijedne oznake: {bez_oznaka}. To su slike bez osobe; ako "
+              f"ih je vise nego sto treba, oznake nisu u {labels_dir}.")
+    return len(names)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--detector", choices=tuple(COLORS), default=None,
+                        help="samo jedan postupak umesto oba")
+    parser.add_argument("--min-score", type=float, default=0.0,
+                        help="ne iscrtavaj nalaze ispod ove mere poverenja")
+    parser.add_argument("--only-truth", action="store_true",
+                        help="samo tacni okviri, za proveru oznacavanja")
+    parser.add_argument("--images", default=IMAGES_DIR)
+    parser.add_argument("--labels", default=LABELS_DIR)
+    parser.add_argument("--out", default=OUT_DIR)
+    args = parser.parse_args()
+
+    render(images_dir=args.images, labels_dir=args.labels, out_dir=args.out,
+           detectors=(args.detector,) if args.detector else tuple(COLORS),
+           min_score=args.min_score, only_truth=args.only_truth)
+
+
+if __name__ == "__main__":
+    main()

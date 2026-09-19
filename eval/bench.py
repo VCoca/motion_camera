@@ -9,6 +9,10 @@ Pokretanje:
     python3 eval/bench.py                    oba detektora
     python3 eval/bench.py --detector hog
     python3 eval/bench.py --repeat 3         ponovljena merenja vremena
+    python3 eval/bench.py --iscrtaj          uz to i slike sa okvirima
+
+Okviri se ne iscrtavaju u toku merenja nego posle njega, iz vec upisanih
+datoteka sa nalazima, da upis slika ne bi ulazio u izmereno vreme.
 """
 
 import argparse
@@ -25,6 +29,8 @@ import cv2  # noqa: E402
 import config  # noqa: E402
 from detectors import AVAILABLE, create_detector  # noqa: E402
 from logger import cpu_temperature, throttled_state  # noqa: E402
+
+from draw import render as render_boxes  # noqa: E402
 
 EVAL_DIR = os.path.dirname(os.path.abspath(__file__))
 IMAGES_DIR = os.path.join(EVAL_DIR, "dataset", "images")
@@ -140,6 +146,9 @@ def main():
     parser.add_argument("--cooldown", type=float, default=120.0,
                         help="pauza u sekundama izmedju dva detektora, da "
                              "drugi ne meri na zagrejanoj ploci; 0 iskljucuje")
+    parser.add_argument("--iscrtaj", action="store_true",
+                        help="posle merenja iscrtaj nalaze i tacne okvire "
+                             "preko slika u results/pregled/")
     args = parser.parse_args()
 
     IMAGES_DIR = args.images
@@ -163,6 +172,11 @@ def main():
         writer.writerows(summaries)
 
     print(f"\nSazetak vremena -> {timing_summary}")
+
+    if args.iscrtaj:
+        print()
+        render_boxes(images_dir=IMAGES_DIR, detectors=tuple(names))
+
     print("Sledeci korak: python3 eval/metrics.py")
 
 

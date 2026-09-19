@@ -68,14 +68,19 @@ def capture_frame():
     return frame, elapsed_ms
 
 
-def draw_boxes(frame, detections):
-    """Iscrtava okvire sa merom poverenja uz svaki nalaz."""
+def draw_boxes(frame, detections, color=(0, 255, 0), prefix=""):
+    """Iscrtava okvire sa merom poverenja uz svaki nalaz.
+
+    Podrazumevane vrednosti daju isti prikaz kao u radu sistema. Boja i
+    natpis se menjaju samo kad se na istu sliku iscrtavaju nalazi dva
+    postupka, radi poredjenja (vidi eval/draw.py).
+    """
     for det in detections:
         cv2.rectangle(frame, (det.x, det.y),
-                      (det.x + det.w, det.y + det.h), (0, 255, 0), 2)
-        label = f"{det.score:.2f}"
+                      (det.x + det.w, det.y + det.h), color, 2)
+        label = f"{prefix}{det.score:.2f}" if prefix else f"{det.score:.2f}"
         cv2.putText(frame, label, (det.x, max(det.y - 6, 12)),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1,
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1,
                     cv2.LINE_AA)
 
 
