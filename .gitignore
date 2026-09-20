@@ -20,3 +20,5 @@ eval/dataset/images/*
 # Pristupni podaci naloga za slanje poste i podesavanja korisnika
 smtp.json
 settings.json
+eval/dataset/split.csv
+motion_camera_*.patch

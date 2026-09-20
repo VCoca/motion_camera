@@ -39,26 +39,31 @@ FRAME_FIELDS = [
 ]
 
 
-def _ensure_file():
+def _ensure_header(path, fields):
     """Pravi evidenciju ako je nema. Ako postoji, a zaglavlje joj se ne
-    poklapa sa FIELDS (stara evidencija posle dodavanja kolone), odlaze se u
-    stranu: dopisivanje redova sa novim brojem kolona pod starim zaglavljem
-    daje datoteku koju nijedan alat ne cita ispravno."""
+    poklapa sa zadatim poljima (stara evidencija posle dodavanja kolone),
+    odlaze se u stranu: dopisivanje redova sa novim brojem kolona pod starim
+    zaglavljem daje datoteku koju nijedan alat ne cita ispravno, a greska se
+    primeti tek pri obradi, kada je snimanje vec gotovo."""
     os.makedirs(config.LOG_FOLDER, exist_ok=True)
 
-    if os.path.exists(config.EVENT_CSV):
-        with open(config.EVENT_CSV, newline="") as handle:
+    if os.path.exists(path):
+        with open(path, newline="") as handle:
             header = next(csv.reader(handle), [])
-        if header == FIELDS:
+        if header == fields:
             return
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        backup = f"{config.EVENT_CSV}.{stamp}.old"
-        os.replace(config.EVENT_CSV, backup)
-        print(f"evidencija je imala staro zaglavlje, sacuvana kao {backup}",
-              flush=True)
+        backup = f"{path}.{stamp}.old"
+        os.replace(path, backup)
+        print(f"evidencija {os.path.basename(path)} je imala staro zaglavlje, "
+              f"sacuvana kao {backup}", flush=True)
 
-    with open(config.EVENT_CSV, "w", newline="") as handle:
-        csv.DictWriter(handle, fieldnames=FIELDS).writeheader()
+    with open(path, "w", newline="") as handle:
+        csv.DictWriter(handle, fieldnames=fields).writeheader()
+
+
+def _ensure_file():
+    _ensure_header(config.EVENT_CSV, FIELDS)
 
 
 def cpu_temperature():
@@ -114,13 +119,10 @@ def log_event(detector="-", width="", height="", t_capture_ms=None,
 
 def log_frame(frame_id, scenario="", width="", height="", decision=""):
     """Upisuje red u frames.csv za sliku prikupljenu u rezimu --save-mode all."""
-    os.makedirs(config.LOG_FOLDER, exist_ok=True)
-    exists = os.path.exists(config.FRAMES_CSV)
+    _ensure_header(config.FRAMES_CSV, FRAME_FIELDS)
 
     with open(config.FRAMES_CSV, "a", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=FRAME_FIELDS)
-        if not exists:
-            writer.writeheader()
         writer.writerow({
             "frame_id": frame_id,
             "ts": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
